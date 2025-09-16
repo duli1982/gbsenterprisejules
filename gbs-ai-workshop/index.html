@@ -1157,27 +1157,17 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
         // --- GLOBAL STATE ---
-        let db, auth, userId, userPromptsUnsubscribe, appId;
+        let db, auth, functions, userId, userPromptsUnsubscribe, appId;
         let userLibrary = []; // Local cache of user's prompts
         let currentScenarioCategory = null;
         let currentScenarioIndex = 0;
         let currentDayEventIndex = 0;
 
         // --- STATIC DATA ---
-        const prompts = [
-            { id: 'prebuilt-1', category: 'Email', title: 'Summarize Email Thread', content: "Act as a GBS project manager. Below is a long email thread about the 'Q3 Financial Reporting' project. Please summarize the key decisions made, the outstanding questions, and the action items for my team. [Paste email thread here]" },
-            { id: 'prebuilt-2', category: 'Email', title: 'Draft Professional Email', content: "Draft a professional but friendly email to a stakeholder, [Stakeholder Name], informing them that the 'Project Alpha' deliverable will be delayed by 2 days due to unforeseen data validation issues. Reassure them that the core timeline is not at risk and that we will provide the final report by EOD on [New Date]. Offer a brief call to answer any questions." },
-            { id: 'prebuilt-3', category: 'Email', title: 'Change Email Tone', content: "Make the following email draft more concise and assertive, while remaining professional. [Paste your draft email here]" },
-            { id: 'prebuilt-4', category: 'Meetings', title: 'Generate Meeting Agenda', content: "Generate a 30-minute meeting agenda for a kickoff call with the marketing team for a new 'Competitor Analysis' project. The goals are to align on scope, define deliverables, and agree on a timeline. Include time for introductions and Q&A." },
-            { id: 'prebuilt-5', category: 'Meetings', title: 'Summarize Meeting Notes', content: "Act as an executive assistant. Review the following raw meeting notes and transform them into a clean summary. The summary should have three sections: 'Key Discussion Points', 'Decisions Made', and a table of 'Action Items' with columns for 'Task', 'Owner', and 'Due Date'. [Paste raw meeting notes here]" },
-            { id: 'prebuilt-6', category: 'Analysis', title: 'Extract Structured Data', content: "I've pasted a project request email below. Please extract the key information and format it as a JSON object with the following keys: 'projectName', 'stakeholderName', 'requestedDueDate', 'keyDeliverables'. [Paste project request email here]" },
-            { id: 'prebuilt-7', category: 'Analysis', title: 'Brainstorm Report Content', content: "I need to create a 5-slide PowerPoint presentation summarizing our team's Q2 performance. Our key achievements were: completed Project Phoenix on time, reduced ticket response time by 15%, and onboarded two new team members. Our main challenge was a data outage in May. Please generate a slide-by-slide outline for this presentation, including a title and 3-4 bullet points for each slide." },
-            { id: 'prebuilt-8', category: 'Team', title: 'Create Process Checklist', content: "Our team needs to create a standard process for onboarding a new client into our system. The key steps involve: receiving the initial request, validating the data, creating the client profile in Salesforce, sending a welcome packet, and scheduling a kickoff call. Please turn this into a detailed checklist that a team member can follow." },
-            { id: 'prebuilt-9', category: 'Team', title: 'Explain a Complex Topic', content: "Explain the concept of 'data integrity' as you would to a new team member who has no technical background. Use an analogy to make it easy to understand." },
-        ];
-
+        let prompts = [];
         const scenarios = {
             "General": [
                 {
@@ -1431,6 +1421,7 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
+            functions = getFunctions(app);
 
             onAuthStateChanged(auth, user => {
                 if (user) {
@@ -1864,39 +1855,29 @@
                 outputContainer.classList.add('hidden');
                 errorContainer.classList.add('hidden');
 
-                const meta_prompt = `You are an expert in prompt engineering. Analyze the following text and generate a high-quality, effective prompt that could have been used to create it. Break down your reasoning, explaining why the prompt you created is effective. The prompt should be structured to include: 1. A clear persona (e.g., 'Act as a...'). 2. A specific task or goal. 3. Instructions on tone and format if they can be inferred from the text. Return your response as a JSON object with two keys: "generated_prompt" and "explanation".\n\nText to analyze:\n---\n${input_text}\n---`;
+                const generateReversePrompt = httpsCallable(functions, 'generateReversePrompt');
 
                 try {
-                    const apiKey = ""; // TODO: Add your Google AI API key here
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-                    const payload = { contents: [{ role: "user", parts: [{ text: meta_prompt }] }] };
+                    const result = await generateReversePrompt({ text: input_text });
+                    const parsedJson = result.data;
 
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`API request failed with status ${response.status}`);
-                    }
-
-                    const result = await response.json();
-
-                    if (result.candidates && result.candidates[0].content.parts[0].text) {
-                        const responseText = result.candidates[0].content.parts[0].text;
-                        const cleanedText = responseText.replace(/```json|```/g, '').trim();
-                        const parsedJson = JSON.parse(cleanedText);
-
+                    if (parsedJson.generated_prompt && parsedJson.explanation) {
                         document.getElementById('reverse-prompt-output').textContent = parsedJson.generated_prompt;
                         document.getElementById('reverse-prompt-explanation').textContent = parsedJson.explanation;
                         outputContainer.classList.remove('hidden');
                     } else {
-                        throw new Error("Invalid response structure from API.");
+                         throw new Error("Invalid response structure from the function.");
                     }
+
                 } catch (error) {
                     console.error("Reverse prompt generation failed:", error);
-                    errorContainer.textContent = "Sorry, something went wrong while generating the prompt. Please try again.";
+                    let errorMessage = "An unknown error occurred. Please try again.";
+                    if (error.code === 'unauthenticated') {
+                        errorMessage = "You must be signed in to use this feature.";
+                    } else if (error.message) {
+                        errorMessage = `Error: ${error.message}`;
+                    }
+                    errorContainer.textContent = errorMessage;
                     errorContainer.classList.remove('hidden');
                 } finally {
                     spinner.classList.add('hidden');
@@ -2167,7 +2148,16 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await initFirebase();
             updateSectionVisibility(); // Call after Firebase to ensure auth state is considered if needed later
-            displayPrompts('All');
+
+            try {
+                const response = await fetch('./prompts.json');
+                prompts = await response.json();
+                // Now that prompts are loaded, initialize the parts of the UI that use them
+                displayPrompts('All');
+                renderMyLibrary();
+            } catch (error) {
+                console.error("Failed to load prompts data:", error);
+            }
         });
 
     </script>
