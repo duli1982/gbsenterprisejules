@@ -7,6 +7,7 @@
     <title>Gemini Prompt Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="../shared/hub-button.css">
+    <link rel="stylesheet" href="../shared/back-to-top.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -364,40 +365,6 @@
             margin-right: 6px;
         }
 
-        /* --- Scroll to Top Button --- */
-        .scroll-to-top {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 50px;
-            height: 50px;
-            background-color: #4A90E2;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
-            transition: all 0.3s ease;
-            opacity: 0;
-            visibility: hidden;
-            z-index: 1000;
-        }
-
-        .scroll-to-top.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .scroll-to-top:hover {
-            background-color: #3A7BC8;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(74, 144, 226, 0.4);
-        }
-
         /* ===== OVERRIDES: make Quick Start & Pro Tips match site text and neutralize green accents ===== */
 
         /* Make Quick Start title + Pro Tips heading and their content use the same text color as page body */
@@ -464,7 +431,7 @@
 <body class="antialiased">
 
     <!-- Scroll to Top Button -->
-    <button id="scroll-to-top" class="scroll-to-top" title="Scroll to top">
+    <button id="back-to-top" class="scroll-to-top" title="Scroll to top">
         ↑
     </button>
 
@@ -600,34 +567,11 @@
 
 
     <script type="module">
+        import { BackToTop } from '../shared/scripts/components/back-to-top.js';
         // --- DATA STRUCTURE ---
         let promptData = {};
         let allPrompts = [];
         let lastScrollPosition = 0;
-
-        // --- SCROLL TO TOP FUNCTIONALITY ---
-        const scrollToTopBtn = document.getElementById('scroll-to-top');
-
-        // Show/hide scroll to top button based on scroll position
-        function toggleScrollToTopButton() {
-            if (window.pageYOffset > 300) {
-                scrollToTopBtn.classList.add('visible');
-            } else {
-                scrollToTopBtn.classList.remove('visible');
-            }
-        }
-
-        // Smooth scroll to top
-        function scrollToTop() {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
-        }
-
-        // Event listeners for scroll to top
-        window.addEventListener('scroll', toggleScrollToTopButton);
-        scrollToTopBtn.addEventListener('click', scrollToTop);
 
         /**
          * Flattens the prompt data into a single array for easier searching.
@@ -1180,6 +1124,7 @@ copyGemBtn.addEventListener('click', () => {
 
         // --- INITIAL LOAD ---
         document.addEventListener('DOMContentLoaded', () => {
+            new BackToTop();
             loadPrompts().then(() => {
                 // This function handles incoming anchor links to show the right category view
                 if (window.location.hash) {
