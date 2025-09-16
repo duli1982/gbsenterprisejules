@@ -1173,6 +1173,14 @@
         import { myDayEvents } from './data/myDayEvents.js';
         import { opportunityData, opportunityDetailsData } from './data/opportunityData.js';
         import { OpportunityChart } from './components/charts/OpportunityChart.js';
+        import { PromptLibrary } from './components/prompts/PromptLibrary.js';
+        import { MyLibrary } from './components/prompts/MyLibrary.js';
+        import { PromptBuilder } from './components/prompts/PromptBuilder.js';
+        import { ReversePrompt } from './components/prompts/ReversePrompt.js';
+        import { ScenarioSimulator } from './components/simulators/ScenarioSimulator.js';
+        import { MyDaySimulator } from './components/simulators/MyDaySimulator.js';
+        import { CaseStudies } from './components/ui/CaseStudies.js';
+        import { TeamLeadership } from './components/ui/TeamLeadership.js';
         // --- FIREBASE INITIALIZATION ---
         async function initFirebase() {
             appId = typeof __app_id !== 'undefined' ? __app_id : 'gbs-gemini-training';
@@ -1222,8 +1230,10 @@
                     userLibrary.push({ id: doc.id, ...doc.data() });
                 });
                 console.log("User library loaded/updated:", userLibrary);
-                renderMyLibrary();
-                displayPrompts('All'); // Re-render main library to update favorite statuses
+                // Dispatch a custom event to notify components of the update
+                document.dispatchEvent(new CustomEvent('userLibraryUpdated', {
+                    detail: { userLibrary }
+                }));
             });
         }
 
@@ -1249,111 +1259,35 @@
             }
         }
 
-        // --- RENDER FUNCTIONS ---
-        function renderMyLibrary() {
-            const customList = document.getElementById('my-custom-prompts-list');
-            const favoriteList = document.getElementById('my-favorite-prompts-list');
-            const noCustomMsg = document.getElementById('no-custom-prompts');
-            const noFavoriteMsg = document.getElementById('no-favorite-prompts');
-
-            if (!customList) return; // Exit if not on the right page
-
-            customList.innerHTML = '';
-            favoriteList.innerHTML = '';
-
-            const customPrompts = userLibrary.filter(p => p.type === 'custom');
-            const favoritePrompts = userLibrary.filter(p => p.type === 'favorite');
-
-            // Render Custom Prompts
-            if (customPrompts.length > 0) {
-                noCustomMsg.classList.add('hidden');
-                customList.classList.remove('hidden');
-                customPrompts.forEach(prompt => {
-                    const card = createPromptCard(prompt, true);
-                    customList.appendChild(card);
-                });
-            } else {
-                noCustomMsg.classList.remove('hidden');
-                customList.classList.add('hidden');
-            }
-
-            // Render Favorite Prompts
-            if (favoritePrompts.length > 0) {
-                noFavoriteMsg.classList.add('hidden');
-                favoriteList.classList.remove('hidden');
-                favoritePrompts.forEach(prompt => {
-                    const originalPrompt = prompts.find(p => p.id === prompt.originalId);
-                    if (originalPrompt) {
-                       const card = createPromptCard({ ...originalPrompt, libraryId: prompt.id }, true);
-                       favoriteList.appendChild(card);
-                    }
-                });
-            } else {
-                noFavoriteMsg.classList.remove('hidden');
-                favoriteList.classList.add('hidden');
-            }
-        }
-
-        const promptLibraryEl = document.getElementById('prompt-library');
-        function displayPrompts(filter) {
-            if (!promptLibraryEl) return;
-            promptLibraryEl.innerHTML = '';
-            const filteredPrompts = (filter === 'All') ? prompts : prompts.filter(p => p.category === filter);
-
-            filteredPrompts.forEach(prompt => {
-                const card = createPromptCard(prompt, false);
-                promptLibraryEl.appendChild(card);
-            });
-        }
-
-        function createPromptCard(prompt, isMyLibrary) {
-            const card = document.createElement('div');
-            card.className = 'prompt-card bg-white p-6 rounded-lg shadow-sm';
-
-            const isFavorited = userLibrary.some(p => p.type === 'favorite' && p.originalId === prompt.id);
-
-            let buttonsHtml = '';
-            if (isMyLibrary) {
-                if (prompt.type === 'custom') { // It's a custom prompt in the library
-                    buttonsHtml = `<button data-id="${prompt.id}" class="remove-custom-btn text-red-500 hover:text-red-700 text-xs font-semibold">Remove</button>`;
-                } else { // It's a favorited prompt in the library
-                    buttonsHtml = `<button data-id="${prompt.libraryId}" class="unfavorite-btn text-red-500 hover:text-red-700 text-xs font-semibold">Unfavorite</button>`;
-                }
-            } else { // It's in the main library
-                buttonsHtml = `
-                    <svg data-id="${prompt.id}" class="favorite-btn h-6 w-6 ${isFavorited ? 'favorited' : ''}" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
-                    </svg>
-                `;
-            }
-
-            card.innerHTML = `
-                <div>
-                    <h4 class="font-bold text-lg mb-2 text-[#4A90E2]">${prompt.title}</h4>
-                    <p class="text-gray-600 text-sm">${prompt.content}</p>
-                </div>
-                <div class="mt-4 pt-4 border-t border-gray-100 flex justify-end items-center">
-                    ${buttonsHtml}
-                </div>
-            `;
-            return card;
-        }
-
-
-        // --- EVENT LISTENERS ---
-        document.addEventListener('click', (e) => {
-            // Favorite button in main library
-            if (e.target.closest('.favorite-btn')) {
-                const btn = e.target.closest('.favorite-btn');
-                const promptId = btn.dataset.id;
+        // --- RENDER FUNCTIONS & EVENT LISTENERS ---
+        function initializePromptLibrary() {
+            const handleFavorite = (promptId) => {
                 const existingFavorite = userLibrary.find(p => p.type === 'favorite' && p.originalId === promptId);
-
                 if (existingFavorite) {
                     removePromptFromLibrary(existingFavorite.id);
                 } else {
                     addPromptToLibrary({ type: 'favorite', originalId: promptId });
                 }
+            };
+
+            if (document.getElementById('prompt-library')) {
+                new PromptLibrary('prompt-library', '.prompt-filter-btn', userLibrary, handleFavorite);
             }
+        }
+
+        function initializeMyLibrary() {
+            if (document.getElementById('my-library')) {
+                new MyLibrary(
+                    'my-custom-prompts-list',
+                    'my-favorite-prompts-list',
+                    'no-custom-prompts',
+                    'no-favorite-prompts',
+                    userLibrary
+                );
+            }
+        }
+
+        document.addEventListener('click', (e) => {
             // Unfavorite button in my library
             if (e.target.matches('.unfavorite-btn')) {
                 removePromptFromLibrary(e.target.dataset.id);
@@ -1362,19 +1296,6 @@
             if (e.target.matches('.remove-custom-btn')) {
                 removePromptFromLibrary(e.target.dataset.id);
             }
-        });
-
-        const promptFilterBtns = document.querySelectorAll('.prompt-filter-btn');
-        promptFilterBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                promptFilterBtns.forEach(b => {
-                    b.classList.remove('active', 'bg-[#4A90E2]', 'text-white');
-                    b.classList.add('bg-white', 'text-gray-700');
-                });
-                btn.classList.add('active', 'bg-[#4A90E2]', 'text-white');
-                btn.classList.remove('bg-white', 'text-gray-700');
-                displayPrompts(btn.textContent);
-            });
         });
 
         const sections = document.querySelectorAll('.page-section');
@@ -1401,19 +1322,6 @@
                 section.classList.toggle('hidden', !isVisible);
                 if (isVisible) {
                     section.classList.add('fade-in');
-                    // Initialize content for the visible section
-                    if (section.id === 'case-studies' && !section.dataset.initialized) {
-                        initializeCaseStudies();
-                        section.dataset.initialized = 'true';
-                    }
-                    if (section.id === 'simulator' && !section.dataset.initialized) {
-                         displaySimulatorCategoryMenu();
-                        section.dataset.initialized = 'true';
-                    }
-                     if (section.id === 'my-day' && !section.dataset.initialized) {
-                        loadDayEvent(0);
-                        section.dataset.initialized = 'true';
-                    }
                 }
             });
 
@@ -1480,334 +1388,51 @@
         }
 
         // --- Prompt Builder Logic ---
-        const generatePromptBtn = document.getElementById('generatePromptBtn');
-        const saveToLibraryBtn = document.getElementById('saveToLibraryBtn');
-
-        if (generatePromptBtn) {
-            generatePromptBtn.addEventListener('click', () => {
-                const goal = document.getElementById('promptGoal').value;
-                const audience = document.getElementById('promptAudience').value;
-                const tone = document.getElementById('promptTone').value;
-                const format = document.getElementById('promptFormat').value;
-                const context = document.getElementById('promptContext').value.trim();
-
-                if (!context) {
-                    console.warn('Please provide some context for your prompt.');
-                    return;
-                }
-
-                let promptText = `Act as an expert GBS Manager. Your task is to ${goal.toLowerCase()}. The audience is ${audience.toLowerCase()}. The tone of the response should be ${tone.toLowerCase()} and the output must be in the format of ${format.toLowerCase()}.\n\nBased on these requirements, please process the following context:\n\n---\n${context}\n---`;
-
-                document.getElementById('generatedPromptOutput').textContent = promptText;
-                document.getElementById('generatedPromptContainer').classList.remove('hidden');
-            });
-        }
-
-        if (saveToLibraryBtn) {
-            saveToLibraryBtn.addEventListener('click', () => {
-                const content = document.getElementById('generatedPromptOutput').textContent;
-                const title = document.getElementById('promptGoal').value; // Use goal as title
-
-                if (content) {
-                    const newPrompt = {
-                        type: 'custom',
-                        title: `Custom: ${title}`,
-                        content: content,
-                        createdAt: new Date().toISOString()
-                    };
-                    addPromptToLibrary(newPrompt);
-                    saveToLibraryBtn.textContent = 'Saved!';
-                    setTimeout(() => { saveToLibraryBtn.textContent = 'Save'; }, 2000);
-                }
-            });
-        }
-
-        const copyPromptBtn = document.getElementById('copyPromptBtn');
-        if(copyPromptBtn) {
-            copyPromptBtn.addEventListener('click', () => {
-                const textToCopy = document.getElementById('generatedPromptOutput').textContent;
-                navigator.clipboard.writeText(textToCopy).then(() => {
-                    copyPromptBtn.textContent = 'Copied!';
-                    setTimeout(() => { copyPromptBtn.textContent = 'Copy'; }, 2000);
-                }).catch(err => {
-                    console.error('Failed to copy text: ', err);
-                });
-            });
+        function initializePromptBuilder() {
+            if (document.getElementById('builder')) {
+                new PromptBuilder('builder', addPromptToLibrary);
+            }
         }
 
         // --- Reverse Prompt Logic ---
-        const generateReversePromptBtn = document.getElementById('generateReversePromptBtn');
-        if (generateReversePromptBtn) {
-            generateReversePromptBtn.addEventListener('click', async () => {
-                const input_text = document.getElementById('reversePromptInput').value;
-                const spinner = document.getElementById('reverse-prompt-spinner');
-                const outputContainer = document.getElementById('reverse-prompt-output-container');
-                const errorContainer = document.getElementById('reverse-prompt-error');
-
-                if (!input_text.trim()) {
-                    errorContainer.textContent = 'Please paste some text to analyze.';
-                    errorContainer.classList.remove('hidden');
-                    return;
-                }
-
-                spinner.classList.remove('hidden');
-                outputContainer.classList.add('hidden');
-                errorContainer.classList.add('hidden');
-
+        function initializeReversePrompt() {
+            const handleGenerate = async (inputText) => {
                 const generateReversePrompt = httpsCallable(functions, 'generateReversePrompt');
+                const result = await generateReversePrompt({ text: inputText });
+                return result.data;
+            };
 
-                try {
-                    const result = await generateReversePrompt({ text: input_text });
-                    const parsedJson = result.data;
-
-                    if (parsedJson.generated_prompt && parsedJson.explanation) {
-                        document.getElementById('reverse-prompt-output').textContent = parsedJson.generated_prompt;
-                        document.getElementById('reverse-prompt-explanation').textContent = parsedJson.explanation;
-                        outputContainer.classList.remove('hidden');
-                    } else {
-                         throw new Error("Invalid response structure from the function.");
-                    }
-
-                } catch (error) {
-                    console.error("Reverse prompt generation failed:", error);
-                    let errorMessage = "An unknown error occurred. Please try again.";
-                    if (error.code === 'unauthenticated') {
-                        errorMessage = "You must be signed in to use this feature.";
-                    } else if (error.message) {
-                        errorMessage = `Error: ${error.message}`;
-                    }
-                    errorContainer.textContent = errorMessage;
-                    errorContainer.classList.remove('hidden');
-                } finally {
-                    spinner.classList.add('hidden');
-                }
-            });
+            if (document.getElementById('reverse-prompt')) {
+                new ReversePrompt('reverse-prompt', handleGenerate);
+            }
         }
 
         // --- Scenario Simulator Logic ---
-        const simulatorContainer = document.getElementById('simulator-container');
-
-        function displaySimulatorCategoryMenu() {
-            if (!simulatorContainer) return;
-            let categoryHtml = Object.keys(scenarios).map(category => `
-                <div class="category-option p-6 rounded-lg cursor-pointer text-center" data-category="${category}">
-                    <h3 class="font-bold text-xl text-[#4A90E2]">${category}</h3>
-                </div>
-            `).join('');
-
-            simulatorContainer.innerHTML = `
-                <h3 class="text-2xl font-bold text-center mb-6">Choose a Scenario Category</h3>
-                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">${categoryHtml}</div>
-            `;
-        }
-
-        function loadScenario() {
-            if (!simulatorContainer || !currentScenarioCategory) return;
-
-            const scenario = scenarios[currentScenarioCategory][currentScenarioIndex];
-
-            if (!scenario) {
-                simulatorContainer.innerHTML = `
-                    <p class="text-center text-gray-600 text-xl">You've completed all scenarios in this category!</p>
-                    <div class="mt-6 text-center">
-                        <button id="backToCategoriesBtn" class="bg-gray-600 text-white font-bold py-2 px-6 rounded-full hover:bg-gray-700 transition-colors">Back to Categories</button>
-                    </div>
-                `;
-                return;
+        function initializeScenarioSimulator() {
+            if (document.getElementById('simulator-container')) {
+                new ScenarioSimulator('simulator-container');
             }
-
-            let optionsHtml = scenario.prompts.map((p, i) => `
-                <div class="scenario-option p-4 rounded-lg cursor-pointer" data-index="${i}">
-                    <p class="font-semibold">${p.text}</p>
-                    <div class="feedback mt-2 text-sm hidden"></div>
-                </div>
-            `).join('');
-
-            simulatorContainer.innerHTML = `
-                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-2xl font-bold text-[#4A90E2]">${scenario.title}</h3>
-                    <button id="backToCategoriesBtn" class="text-sm text-gray-500 hover:text-gray-800">&larr; Back to Categories</button>
-                </div>
-                <p class="text-gray-600 mb-6">${scenario.problem}</p>
-                <div class="space-y-4">${optionsHtml}</div>
-                <div class="mt-6 text-right">
-                    <button id="nextScenarioBtn" class="hidden bg-[#4A90E2] text-white font-bold py-2 px-6 rounded-full hover:bg-blue-600 transition-colors">Next Scenario</button>
-                </div>
-            `;
-        }
-
-        if (simulatorContainer) {
-            simulatorContainer.addEventListener('click', e => {
-                // Category selection
-                const categoryEl = e.target.closest('.category-option');
-                if (categoryEl) {
-                    currentScenarioCategory = categoryEl.dataset.category;
-                    currentScenarioIndex = 0;
-                    loadScenario();
-                    return;
-                }
-
-                // Go back to category menu
-                if (e.target.id === 'backToCategoriesBtn') {
-                    currentScenarioCategory = null;
-                    displaySimulatorCategoryMenu();
-                    return;
-                }
-
-                // Prompt option selection
-                const optionEl = e.target.closest('.scenario-option');
-                if (optionEl && !optionEl.classList.contains('selected')) {
-                    const selectedIndex = parseInt(optionEl.dataset.index);
-                    const scenario = scenarios[currentScenarioCategory][currentScenarioIndex];
-                    const selectedPrompt = scenario.prompts[selectedIndex];
-
-                    // Disable further clicks
-                    const allOptions = simulatorContainer.querySelectorAll('.scenario-option');
-                    allOptions.forEach(opt => opt.classList.add('selected')); // Mark all as selected to prevent re-clicks
-
-                    // Show feedback
-                    const feedbackEl = optionEl.querySelector('.feedback');
-                    feedbackEl.textContent = selectedPrompt.feedback;
-                    feedbackEl.classList.remove('hidden');
-
-                    if (selectedPrompt.isCorrect) {
-                        optionEl.classList.add('correct');
-                    } else {
-                        optionEl.classList.add('incorrect');
-                        // Highlight the correct one
-                        const correctIndex = scenario.prompts.findIndex(p => p.isCorrect);
-                        simulatorContainer.querySelector(`.scenario-option[data-index='${correctIndex}']`).classList.add('correct');
-                    }
-
-                    document.getElementById('nextScenarioBtn').classList.remove('hidden');
-                }
-
-                // Next scenario button
-                if (e.target.id === 'nextScenarioBtn') {
-                    currentScenarioIndex++;
-                    loadScenario();
-                }
-            });
         }
 
         // --- Case Study Logic ---
-        const caseStudyContainer = document.getElementById('case-study-container');
-
         function initializeCaseStudies() {
-            if (!caseStudyContainer) return;
-            const caseStudyTabs = document.createElement('nav');
-            caseStudyTabs.id = 'case-study-tabs';
-            caseStudyTabs.className = '-mb-px flex space-x-8';
-            caseStudyTabs.setAttribute('aria-label', 'Tabs');
-
-            const caseStudyContent = document.createElement('div');
-            caseStudyContent.id = 'case-study-content';
-            caseStudyContent.className = 'mt-8';
-
-            caseStudyContainer.innerHTML = '';
-            caseStudyContainer.appendChild(caseStudyTabs);
-            caseStudyContainer.appendChild(caseStudyContent);
-
-            const categories = Object.keys(caseStudies);
-
-            caseStudyTabs.innerHTML = categories.map((category, index) => `
-                <button class="case-study-tab ${index === 0 ? 'active' : ''}" data-category="${category}">${category}</button>
-            `).join('');
-
-            loadCaseStudy(categories[0]);
-
-            caseStudyTabs.addEventListener('click', e => {
-                if (e.target.matches('.case-study-tab')) {
-                    const category = e.target.dataset.category;
-                    document.querySelectorAll('.case-study-tab').forEach(tab => tab.classList.remove('active'));
-                    e.target.classList.add('active');
-                    loadCaseStudy(category);
-                }
-            });
-        }
-
-        function loadCaseStudy(category) {
-            const caseStudyContent = document.getElementById('case-study-content');
-            if (!caseStudyContent) return;
-            const studySteps = caseStudies[category];
-            let stepsHtml = studySteps.map((step, index) => `
-                <div class="timeline-step bg-white p-6 rounded-lg shadow-sm">
-                    <h4 class="font-bold text-lg text-[#4A90E2] mb-2">Step ${index + 1}: ${step.title}</h4>
-                    <p class="text-sm text-gray-500 italic mb-4">${step.description}</p>
-                    <div class="code-block text-xs">${step.prompt}</div>
-                </div>
-                ${index < studySteps.length - 1 ? '<div class="timeline-connector"></div>' : ''}
-            `).join('');
-
-            caseStudyContent.innerHTML = `<div class="timeline-container">${stepsHtml}</div>`;
+            if (document.getElementById('case-study-container')) {
+                new CaseStudies('case-study-container');
+            }
         }
 
         // --- "My Day with AI" Logic ---
-        const myDayContainer = document.getElementById('my-day-container');
-
-        function loadDayEvent(index) {
-            if (!myDayContainer) return;
-
-            if (index >= myDayEvents.length) {
-                myDayContainer.innerHTML = `
-                    <p class="text-center text-gray-600 text-2xl font-bold">You've completed your day!</p>
-                    <p class="text-center text-gray-500 mt-4">You've seen how a few smart prompts can save hours of work. You're ready to start integrating AI into your real workflow.</p>
-                    <div class="mt-6 text-center">
-                        <button id="restartDayBtn" class="bg-gray-600 text-white font-bold py-2 px-6 rounded-full hover:bg-gray-700 transition-colors">Start Day Over</button>
-                    </div>
-                `;
-                return;
+        function initializeMyDaySimulator() {
+            if (document.getElementById('my-day-container')) {
+                new MyDaySimulator('my-day-container');
             }
-
-            const event = myDayEvents[index];
-            let optionsHtml = event.options.map((opt, i) => `
-                <div class="scenario-option p-4 rounded-lg cursor-pointer" data-index="${i}">
-                    <p class="font-semibold">${opt.text}</p>
-                    <div class="feedback mt-2 text-sm hidden p-4 bg-green-100 text-green-800 rounded-lg"></div>
-                </div>
-            `).join('');
-
-            myDayContainer.innerHTML = `
-                 <div class="mb-4">
-                    <span class="inline-block bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">${event.time}</span>
-                 </div>
-                <p class="text-gray-600 mb-6 text-lg">${event.task}</p>
-                <div class="space-y-4">${optionsHtml}</div>
-                <div class="mt-6 text-right">
-                    <button id="nextDayEventBtn" class="hidden bg-[#4A90E2] text-white font-bold py-2 px-6 rounded-full hover:bg-blue-600 transition-colors">Continue Day &rarr;</button>
-                </div>
-            `;
         }
 
-        if(myDayContainer) {
-            myDayContainer.addEventListener('click', e => {
-                const optionEl = e.target.closest('.scenario-option');
-                if (optionEl && !optionEl.classList.contains('selected')) {
-                    const selectedIndex = parseInt(optionEl.dataset.index);
-                    const event = myDayEvents[currentDayEventIndex];
-                    const selectedOption = event.options[selectedIndex];
-
-                    const allOptions = myDayContainer.querySelectorAll('.scenario-option');
-                    allOptions.forEach(opt => opt.classList.add('selected'));
-
-                    const feedbackEl = optionEl.querySelector('.feedback');
-                    feedbackEl.textContent = selectedOption.outcome;
-                    feedbackEl.classList.remove('hidden');
-                    optionEl.classList.add('correct');
-
-                    document.getElementById('nextDayEventBtn').classList.remove('hidden');
-                }
-
-                if (e.target.id === 'nextDayEventBtn') {
-                    currentDayEventIndex++;
-                    loadDayEvent(currentDayEventIndex);
-                }
-
-                if (e.target.id === 'restartDayBtn') {
-                    currentDayEventIndex = 0;
-                    loadDayEvent(currentDayEventIndex);
-                }
-            });
+        // --- Team Leadership Logic ---
+        function initializeTeamLeadership() {
+            if (document.getElementById('team-leadership')) {
+                new TeamLeadership('team-leadership');
+            }
         }
 
         // --- Animated Subtitle Logic ---
@@ -1847,7 +1472,14 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await initFirebase();
             updateSectionVisibility(); // Call after Firebase to ensure auth state is considered if needed later
-            displayPrompts('All');
+            initializePromptLibrary();
+            initializeMyLibrary();
+            initializePromptBuilder();
+            initializeReversePrompt();
+            initializeScenarioSimulator();
+            initializeMyDaySimulator();
+            initializeCaseStudies();
+            initializeTeamLeadership();
             initializeChart();
         });
 
