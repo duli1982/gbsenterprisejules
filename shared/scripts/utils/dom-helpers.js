@@ -1,38 +1,46 @@
 /**
- * A utility module for simplifying DOM selection.
- * This implementation is based on the "10/10 Optimization Plan".
+ * A utility module for DOM manipulation.
+ * @module DomHelpers
  */
 
 /**
- * A concise query selector function.
- * @param {string} sel - The CSS selector.
- * @param {Element|Document} [parent=document] - The parent element to search within.
- * @returns {Element|null} The first matching element or null if not found.
+ * Finds the first element that matches a specified CSS selector.
+ * Throws an error if the element is not found and `required` is true.
+ * @param {string} selector - The CSS selector to match.
+ * @param {object} [options] - Optional parameters.
+ * @param {Element} [options.parent=document] - The parent element to search within.
+ * @param {boolean} [options.required=false] - Whether to throw an error if the element is not found.
+ * @returns {Element|null} The found element, or null if not found and not required.
  */
-export const $ = (sel, parent = document) => parent.querySelector(sel);
+export function qs(selector, { parent = document, required = false } = {}) {
+  const element = parent.querySelector(selector);
+  if (!element && required) {
+    throw new Error(`Required element with selector "${selector}" not found in parent.`);
+  }
+  return element;
+}
 
 /**
- * A concise query selector all function that returns a true array.
- * @param {string} sel - The CSS selector.
- * @param {Element|Document} [parent=document] - The parent element to search within.
- * @returns {Element[]} An array of matching elements.
+ * Finds all elements that match a specified CSS selector.
+ * @param {string} selector - The CSS selector to match.
+ * @param {Element} [parent=document] - The parent element to search within.
+ * @returns {NodeListOf<Element>} A static NodeList containing all found elements.
  */
-export const $$ = (sel, parent = document) => [...parent.querySelectorAll(sel)];
-
-// --- Legacy Aliases for Backward Compatibility ---
-// These can be phased out over time as the codebase is updated.
-
-/**
- * @deprecated Use `$` instead.
- */
-export const qs = $;
+export function qsa(selector, parent = document) {
+  return parent.querySelectorAll(selector);
+}
 
 /**
- * @deprecated Use `$$` instead.
+ * A safe way to get an element, logging an error if it's not found without stopping execution.
+ * This is useful for non-critical elements where a failure is not catastrophic.
+ * @param {string} selector - The CSS selector for the element.
+ * @param {Element} [parent=document] - The parent element to search within.
+ * @returns {Element|null} The element or null if not found.
  */
-export const qsa = (sel, parent) => $$(sel, parent);
-
-/**
- * @deprecated Use `$` instead. This function is redundant.
- */
-export const getElement = $;
+export function getElement(selector, parent = document) {
+    const element = parent.querySelector(selector);
+    if (!element) {
+        console.error(`Error: Element with selector "${selector}" was not found.`);
+    }
+    return element;
+}

@@ -1,6 +1,3 @@
-import { BackToTop } from '../../shared/scripts/components/back-to-top.js';
-import { StorageManager } from '../../shared/scripts/utils/storage-manager.js';
-
 document.addEventListener('DOMContentLoaded', () => {
     const mainPage = document.getElementById('main-page');
     const sessionContainer = document.getElementById('session-container');
@@ -214,7 +211,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateTo(pageId) {
         // Store the scroll position if leaving the main page
         if (document.getElementById('main-page').classList.contains('active') && pageId !== 'main-page') {
-            StorageManager.scroll.save('mainPageScrollPosition');
+            sessionStorage.setItem('mainPageScrollPosition', window.scrollY);
+        }
+
+        // This part seems to be for a different scroll position saving logic, removing it to avoid conflict
+        if (pageId !== 'main-page') {
+            sessionStorage.setItem('scrollPosition', window.scrollY);
         }
 
         // Hide all pages by default
@@ -227,7 +229,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update progress indicators on main page
             setTimeout(() => progressTracker.updateProgressIndicators(), 100);
             // Restore scroll position if returning to the main page
-            StorageManager.scroll.restore('mainPageScrollPosition', -100); // Added -100 for a little buffer above
+            const savedPosition = sessionStorage.getItem('mainPageScrollPosition');
+            if (savedPosition) {
+                window.scrollTo(0, parseInt(savedPosition, 10) - 100); // Added -100 for a little buffer above
+                sessionStorage.removeItem('scrollPosition');
+            }
         } else if (pageId.startsWith('module-')) {
             showSessionMenu(pageId);
         } else {
@@ -278,17 +284,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Re-attach event listeners for any new buttons in the loaded content if necessary
                     const backButton = sessionContainer.querySelector('button');
                     // Store the current module ID before navigating to a session
-                    const currentModuleId = StorageManager.module.getCurrent();
+                    const currentModuleId = sessionStorage.getItem('currentModuleId');
                     if (currentModuleId) {
-                         StorageManager.module.setLastVisited(currentModuleId);
+                         sessionStorage.setItem('lastVisitedModule', currentModuleId);
                     }
                    
                     if(backButton) {
  backButton.onclick = () => {
- const lastModule = StorageManager.module.getLastVisited();
+ const lastModule = sessionStorage.getItem('lastVisitedModule');
                             if (lastModule) {
  navigateTo(lastModule);
-                                StorageManager.module.clearLastVisited(); // Clear after use
+                                sessionStorage.removeItem('lastVisitedModule'); // Clear after use
                             } else {
  navigateTo('main-page');
                             }
@@ -309,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Store the current module ID when navigating to a module session menu
         if (pageId.startsWith('module-')) {
-            StorageManager.module.setCurrent(pageId);
+            sessionStorage.setItem('currentModuleId', pageId);
         }
 
     }
@@ -334,6 +340,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize progress indicators on page load
     setTimeout(() => progressTracker.updateProgressIndicators(), 200);
 
-    // Initialize reusable components
-    new BackToTop();
+    // --- Back to Top Button Logic ---
+    const backToTopBtn = document.getElementById('back-to-top');
+
+    // Show/hide back to top button based on scroll position
+    function toggleBackToTopButton() {
+        if (window.pageYOffset > 300) {
+            backToTopBtn.classList.add('visible');
+        } else {
+            backToTopBtn.classList.remove('visible');
+        }
+    }
+
+    // Smooth scroll to top function
+    function scrollToTop() {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }
+
+    // Event listeners for back to top
+    if (backToTopBtn) {
+        backToTopBtn.addEventListener('click', scrollToTop);
+    }
+
+    // Show/hide button on scroll
+    window.addEventListener('scroll', toggleBackToTopButton);
+
+    // Initial check on page load
+    toggleBackToTopButton();
 });
