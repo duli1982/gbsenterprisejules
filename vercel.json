@@ -1,8 +1,0 @@
-{
-  "rewrites": [
-    {
-      "source": "/gbs-ai-workshop/:path*",
-      "destination": "/gbs-ai-workshop/index.html"
-    }
-  ]
-}
