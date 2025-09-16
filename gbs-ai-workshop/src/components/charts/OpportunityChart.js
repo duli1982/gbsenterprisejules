@@ -2,12 +2,31 @@
 import { opportunityDetailsData } from '../../data/opportunityData.js';
 
 export class OpportunityChart {
-    constructor(chartId, opportunityData, sliders, values, totalPercentageEl) {
+    constructor(chartId, opportunityData) {
+        this.container = document.getElementById(chartId)?.parentElement.parentElement;
+        if (!this.container) {
+            console.error('Chart container element not found');
+            return;
+        }
+
         this.chartId = chartId;
         this.opportunityData = opportunityData;
-        this.sliders = sliders;
-        this.values = values;
-        this.totalPercentageEl = totalPercentageEl;
+
+        // Find elements within the component's scope
+        this.sliders = {
+            repetitive: this.container.querySelector('#repetitiveSlider'),
+            research: this.container.querySelector('#researchSlider'),
+            reactive: this.container.querySelector('#reactiveSlider'),
+            reporting: this.container.querySelector('#reportingSlider')
+        };
+        this.values = {
+            repetitive: this.container.querySelector('#repetitiveValue'),
+            research: this.container.querySelector('#researchValue'),
+            reactive: this.container.querySelector('#reactiveValue'),
+            reporting: this.container.querySelector('#reportingValue')
+        };
+        this.totalPercentageEl = this.container.querySelector('#totalPercentage');
+
         this.chart = null;
 
         this.init();
@@ -16,7 +35,6 @@ export class OpportunityChart {
     init() {
         const ctx = document.getElementById(this.chartId)?.getContext('2d');
         if (!ctx) {
-            console.error('Chart canvas element not found');
             return;
         }
 
@@ -58,14 +76,14 @@ export class OpportunityChart {
         const details = opportunityDetailsData[category];
         if (!details) return;
 
-        document.getElementById('opportunity-intro').classList.add('hidden');
-        const detailsContainer = document.getElementById('opportunity-details');
+        this.container.querySelector('#opportunity-intro').classList.add('hidden');
+        const detailsContainer = this.container.querySelector('#opportunity-details');
         detailsContainer.classList.remove('hidden');
         detailsContainer.classList.add('fade-in');
 
-        document.getElementById('opportunity-title').textContent = details.title;
-        document.getElementById('opportunity-description').textContent = details.description;
-        const examplesList = document.getElementById('opportunity-examples');
+        detailsContainer.querySelector('#opportunity-title').textContent = details.title;
+        detailsContainer.querySelector('#opportunity-description').textContent = details.description;
+        const examplesList = detailsContainer.querySelector('#opportunity-examples');
         examplesList.innerHTML = '';
         details.examples.forEach(ex => {
             const li = document.createElement('li');
